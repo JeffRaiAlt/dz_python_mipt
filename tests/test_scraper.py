@@ -13,7 +13,7 @@ def test_interval():
     assert get_interval(from_page=1, to_page=1) == (1, 1), \
         "Не верно определен интервал"
 
-    
+
 def test_interval_exception():
     with pytest.raises(ValueError):
         get_interval(from_page=50, to_page=51)
@@ -62,4 +62,4 @@ def test_get_book_info():
 
 def test_scrape_books():
     assert len(scrape_books(is_save=False, from_page=2, to_page=3)) == 40, \
-        "Не верное число"
+        "Не верное число страниц с информацией о книгах"
