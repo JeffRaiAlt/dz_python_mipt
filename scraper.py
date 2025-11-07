@@ -123,7 +123,7 @@ def write_to_file(about_books: list) -> None:
     with open(OUTPUT_FILE_NAME, "w", encoding="utf-8") as f:
         for book_info in about_books:
             for key, value in book_info.items():
-                f.write(f'{key}  {value}')
+                f.write(f'{key}: {value}')
                 f.write('\n')
 
 
