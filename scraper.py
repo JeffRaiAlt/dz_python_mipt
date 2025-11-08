@@ -1,6 +1,5 @@
 import re
 import time
-from pathlib import Path
 
 import schedule
 import requests
@@ -93,19 +92,18 @@ def parse_book(text: str) -> dict:
     return book_info
 
 
-def get_books_urls(book_catalogue_url: str) -> list:
+def parse_books_urls(text: str) -> list:
     """
-    Извлекает ссылки на отдельные книги со страницы каталога.
-    Функция отправляет запрос к странице каталога книг, парсит HTML
-    и собирает все ссылки, ведущие на страницы отдельных книг.
+    Извлекает ссылки на отдельные книги со страницы каталога,
+    для этого парсит HTML страницу и собирает все ссылки, ведущие на
+    страницы отдельных книг.
     Args:
-        book_catalogue_url (str): URL страницы каталога книг.
+        text (str): текст HTML страницы каталога книг.
     Returns:
-        list: Список строковых URL, каждый из которых ведёт на страницу книги.
+        list: Список строковых URL, каждый из которых
+        ведёт на страницу книги.
     """
-    response = requests.get(book_catalogue_url, timeout=REQUEST_TIMEOUT)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, "html.parser")
+    soup = BeautifulSoup(text, "html.parser")
     section = soup.find("section")
     rows = section.find_all("h3")
     books_url = []
@@ -113,13 +111,13 @@ def get_books_urls(book_catalogue_url: str) -> list:
         books_url.append(URL_PREFIX + row.find("a").get("href").strip())
     return books_url
 
+
 def write_to_file(about_books: list) -> None:
     """
     Запись полученной информации в файл
     Args:
         about_books (list): данные о книгах
     """
-    Path(OUTPUT_FILE_NAME).parent.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_FILE_NAME, "w", encoding="utf-8") as f:
         for book_info in about_books:
             for key, value in book_info.items():
@@ -142,7 +140,7 @@ def get_page_counts() -> int:
     response.raise_for_status()
     soup = BeautifulSoup(response.text, "html.parser")
     pages_text = soup.find("ul", attrs={"class": "pager"}).text.strip()
-    return int(re.search("of (\\d+)", pages_text).group(1))
+    return int(re.search(r"of (\d+)", pages_text).group(1))
 
 
 def get_interval(from_page: int, to_page: int) ->  tuple[int, int]:
@@ -197,18 +195,22 @@ def scrape_books(is_save=True, from_page=None, to_page=None) -> list:
         list: Список словарей, где каждый словарь содержит данные о книгах.
     """
     about_books = []
+    print("Начало работы")
     interval = get_interval(from_page, to_page)
     for page_num in range(interval[0], interval[1] + 1):
         url = f"{URL_PREFIX}page-{page_num}.html"
-        print(url)
-        list_books = get_books_urls(url)
-        for book_url in list_books:
-            try:
-                about_books.append(get_book_data(book_url))
-            except Exception as e:
-                print(book_url, e)
+        with requests.Session() as session:
+            print("Обработка страницы: ", url)
+            response = session.get(url, timeout=REQUEST_TIMEOUT)
+            list_books = parse_books_urls(response.text)
+            for book_url in list_books:
+                try:
+                    about_books.append(get_book_data(book_url))
+                except Exception as e:
+                    print(book_url, e)
     if is_save:
         write_to_file(about_books)
+    print("Конец работы")
     return about_books
 
 
@@ -234,5 +236,5 @@ def scrape_by_schedule(poll_interval_seconds: int=50) -> None:
 
 
 if __name__ == "__main__":
-    scrape_books()
+    scrape_books(False, 48)
     # scrape_by_schedule()
