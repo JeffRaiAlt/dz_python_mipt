@@ -10,8 +10,7 @@ OUTPUT_FILE_NAME = "./artifacts/books_data.txt"
 REQUEST_TIMEOUT = 15
 
 def get_book_data(book_url: str) -> dict:
-    """
-    Функция возвращает информацию о книге по её URL
+    """Функция возвращает информацию о книге по её URL
     вида https://books.toscrape.com...
     Для этого отправляет HTTP-запрос по указанному адресу страницы книги,
     извлекает основные данные (название, автора, описание, рейтинг и т.д.)
@@ -33,8 +32,7 @@ def get_book_data(book_url: str) -> dict:
 
 
 def parse_book(text: str) -> dict:
-    """
-    Функция осуществляет непосредственный разбор переданного текста HTML
+    """Функция осуществляет непосредственный разбор переданного текста HTML
     страницы, выделяет основные параметры книги и возвращает их в виде
     словаря.
     Args:
@@ -93,15 +91,14 @@ def parse_book(text: str) -> dict:
 
 
 def parse_books_urls(text: str) -> list:
-    """
-    Извлекает ссылки на отдельные книги со страницы каталога,
+    """Извлекает ссылки на отдельные книги со страницы каталога,
     для этого парсит HTML страницу и собирает все ссылки, ведущие на
     страницы отдельных книг.
     Args:
         text (str): текст HTML страницы каталога книг.
     Returns:
-        list: Список строковых URL, каждый из которых
-        ведёт на страницу книги.
+        list: Список строковых URL, каждый из которых ведёт на страницу
+            книги.
     """
     soup = BeautifulSoup(text, "html.parser")
     section = soup.find("section")
@@ -113,8 +110,7 @@ def parse_books_urls(text: str) -> list:
 
 
 def write_to_file(about_books: list) -> None:
-    """
-    Запись полученной информации в файл
+    """Запись полученной информации в файл
     Args:
         about_books (list): данные о книгах
     """
@@ -126,8 +122,7 @@ def write_to_file(about_books: list) -> None:
 
 
 def get_page_counts() -> int:
-    """
-    Определяет общее количество страниц в каталоге.
+    """Определяет общее количество страниц в каталоге.
     Функция обращается к первой странице каталога находит элемент,
     содержащий информацию о количестве страниц, и извлекает это число.
     Используется при пагинации для последовательного обхода всех
@@ -144,8 +139,7 @@ def get_page_counts() -> int:
 
 
 def get_interval(from_page: int, to_page: int) ->  tuple[int, int]:
-    """
-    Возвращает диапазон страниц для обработки.
+    """Возвращает диапазон страниц для обработки.
     Функция проверяет корректность границ диапазона (номер начальной
     и конечной страниц), а если верхняя граница не указана, получает ее
     запросив информацию с сайта, если нижняя не указана ставим по
@@ -157,7 +151,7 @@ def get_interval(from_page: int, to_page: int) ->  tuple[int, int]:
         tuple[int, int]: кортеж from_page, to_page.
     Raises:
         ValueError: если from_page > to_page или если верхняя граница
-        to_page, превышает максимально доступную
+            to_page, превышает максимально доступную
     """
     if from_page is None:
         from_page = 1
@@ -177,8 +171,7 @@ def get_interval(from_page: int, to_page: int) ->  tuple[int, int]:
 
 
 def scrape_books(is_save=True, from_page=None, to_page=None) -> list:
-    """
-    Собирает данные о книгах с сайта https://books.toscrape.com
+    """Собирает данные о книгах с сайта https://books.toscrape.com
     Функция проходит по страницам каталога книг (либо по всем доступным,
     либо в указанном диапазоне), извлекает ссылки на книги, получает
     данные по каждой книге и формирует список результатов. При
@@ -195,46 +188,64 @@ def scrape_books(is_save=True, from_page=None, to_page=None) -> list:
         list: Список словарей, где каждый словарь содержит данные о книгах.
     """
     about_books = []
-    print("Начало работы")
+    print("Начало обработки страниц сайта https://books.toscrape.com")
     interval = get_interval(from_page, to_page)
-    for page_num in range(interval[0], interval[1] + 1):
-        url = f"{URL_PREFIX}page-{page_num}.html"
-        with requests.Session() as session:
+    with requests.Session() as session:
+        for page_num in range(interval[0], interval[1] + 1):
+            url = f"{URL_PREFIX}page-{page_num}.html"
             print("Обработка страницы: ", url)
-            response = session.get(url, timeout=REQUEST_TIMEOUT)
-            list_books = parse_books_urls(response.text)
-            for book_url in list_books:
-                try:
-                    about_books.append(get_book_data(book_url))
-                except Exception as e:
-                    print(book_url, e)
+            try:
+                response = session.get(url, timeout=REQUEST_TIMEOUT)
+                response.raise_for_status()
+                about_books.extend(handle_books_page(response.text))
+            except Exception as e:
+                print(f"Ошибка обработки страницы {url}", e)
+
     if is_save:
         write_to_file(about_books)
-    print("Конец работы")
+    print(f"Обработка завершена, всего обработано {len(about_books)} книг")
     return about_books
 
 
-def scrape_by_schedule(poll_interval_seconds: int=50) -> None:
+def handle_books_page(text: str) -> list:
+    """Обработка страницы с информацией о книгах с последующим
+    разбором данных о самих книгах.
+    Args:
+        text (str): html страница с информацией о книгах
+    Returns:
+        list: список данных о книгах представленных на переданной странице
     """
-    Периодически запускает процесс сбора данных о книгах (`scrape_books`)
-    по расписанию каждый день в 19:00.
+    result = []
+    list_books = parse_books_urls(text)
+    for book_url in list_books:
+        try:
+            result.append(get_book_data(book_url))
+        except Exception as e:
+            print(f"Ошибка обработки информации о книг {book_url}", e)
+    return result
+
+
+def scrape_by_schedule(poll_interval_seconds: int=50) -> None:
+    """Периодически запускает процесс сбора данных о книгах
+    (`scrape_books`) по расписанию каждый день в 19:00.
     Args:
         poll_interval_seconds (int, optional): Интервал между запусками
             процесса в секундах. По умолчанию 50 секунд.
     """
     # Запланировать запуск каждый день в 19:00 по локальному времени машины
     schedule.every().day.at("19:00").do(scrape_books)
-    print("Планировщик запущен. Ожидаю 19:00 каждый день... "
+    print("Планировщик запущен. Запуск в 19:00 каждый день... "
           "(Ctrl+C для остановки)")
     try:
         while True:
             schedule.run_pending()
-            # проверяем расписание не постоянно, а раз в N секунд
+            # проверяем расписание не постоянно, а раз
+            # в poll_interval_seconds секунд
             time.sleep(poll_interval_seconds)
     except KeyboardInterrupt:
         print("\n Остановлено пользователем.")
 
 
 if __name__ == "__main__":
-    scrape_books(False, 48)
+    scrape_books(False, 49)
     # scrape_by_schedule()
